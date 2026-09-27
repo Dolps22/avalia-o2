@@ -73,7 +73,7 @@ export async function onRequestGet(context) {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2026-03-10",
+        "X-GitHub-Api-Version": "2022-11-28",
       },
     });
     if (userResponse.status !== 200) return new Response("Falha ao consultar perfil", { status: 400 });
