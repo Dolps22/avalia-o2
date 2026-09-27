@@ -102,12 +102,11 @@ export async function onRequestGet(context) {
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(await sha256Hex(sessionValue), issuer, subject, email, displayName, sessionExpires, now).run();
 
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: context.env.PUBLIC_BASE_URL,
-      "Set-Cookie": [setSessionCookie(sessionValue), clearTxCookie()].join(", "),
-      "Cache-Control": "no-store",
-    },
-  });
+   const headers = new Headers();
+  headers.set("Location", context.env.PUBLIC_BASE_URL);
+  headers.append("Set-Cookie", setSessionCookie(sessionValue));
+  headers.append("Set-Cookie", clearTxCookie());
+  headers.set("Cache-Control", "no-store");
+
+  return new Response(null, { status: 302, headers });
 }
