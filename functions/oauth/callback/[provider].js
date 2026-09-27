@@ -81,6 +81,7 @@ export async function onRequestGet(context) {
   const errBody = await userResponse.text();
   return new Response(`Falha ao consultar perfil: status=${userResponse.status} body=${errBody}`, { status: 400 });
 }
+    const profile = await userResponse.json();
 
     issuer = "https://github.com";
     subject = String(profile.id);
