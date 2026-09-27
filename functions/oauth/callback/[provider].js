@@ -74,10 +74,13 @@ export async function onRequestGet(context) {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "avalia-o2-oauth-lab",
       },
     });
-    if (userResponse.status !== 200) return new Response("Falha ao consultar perfil", { status: 400 });
-    const profile = await userResponse.json();
+    if (userResponse.status !== 200) {
+  const errBody = await userResponse.text();
+  return new Response(`Falha ao consultar perfil: status=${userResponse.status} body=${errBody}`, { status: 400 });
+}
 
     issuer = "https://github.com";
     subject = String(profile.id);
