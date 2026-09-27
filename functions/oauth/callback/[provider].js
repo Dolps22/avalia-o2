@@ -77,9 +77,7 @@ export async function onRequestGet(context) {
         "User-Agent": "avalia-o2-oauth-lab",
       },
     });
-    if (userResponse.status !== 200) {
-  const errBody = await userResponse.text();
-  return new Response(`Falha ao consultar perfil: status=${userResponse.status} body=${errBody}`, { status: 400 });
+  if (userResponse.status !== 200) return new Response("Falha ao consultar perfil", { status: 400 });
 }
     const profile = await userResponse.json();
 
