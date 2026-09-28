@@ -1,0 +1,1 @@
+https://avalia-o2.pages.dev/oauth/callback/google
