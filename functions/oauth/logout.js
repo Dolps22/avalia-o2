@@ -1,10 +1,12 @@
 import { sha256Hex } from "../_shared/crypto.js";
 import { getCookie, clearSessionCookie } from "../_shared/cookies.js";
 
+const NO_STORE = { "Cache-Control": "no-store" };
+
 export async function onRequestPost(context) {
   const origin = context.request.headers.get("Origin");
   if (origin !== context.env.PUBLIC_BASE_URL) {
-    return new Response("Origem não permitida", { status: 403 });
+    return new Response("Origem não permitida", { status: 403, headers: NO_STORE }); 
   }
 
   const cookie = getCookie(context.request, "__Host-session");
