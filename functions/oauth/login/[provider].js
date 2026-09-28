@@ -5,7 +5,7 @@ import { PROVIDERS, clientIdFor } from "../../_shared/providers.js";
 export async function onRequestGet(context) {
   const { provider } = context.params;
   if (provider !== "google" && provider !== "github") {
-    return new Response("Not found", { status: 404 });
+    return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } }); // AJUSTE: no-store
   }
 
   const cfg = PROVIDERS[provider];
