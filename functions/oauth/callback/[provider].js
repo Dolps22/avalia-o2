@@ -4,8 +4,7 @@ import { PROVIDERS, clientIdFor, clientSecretFor } from "../../_shared/providers
 import { validateGoogleIdToken } from "../../_shared/oidc.js";
 
 const NO_STORE = { "Cache-Control": "no-store" };
-const fail = (message, status = 400) =>
-  new Response(message, { status, headers: NO_STORE }); 
+const fail = (message, status = 400) => new Response(message, { status, headers: NO_STORE });
 
 export async function onRequestGet(context) {
   const { provider } = context.params;
@@ -17,6 +16,7 @@ export async function onRequestGet(context) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
+  
   if (error || !code || !state) {
     return fail("Requisição inválida");
   }
@@ -55,6 +55,7 @@ export async function onRequestGet(context) {
       code_verifier: tx.code_verifier,
     }),
   });
+  
   if (!tokenResponse.ok) return fail("Falha na troca de tokens");
   const tokenData = await tokenResponse.json();
 
@@ -62,12 +63,12 @@ export async function onRequestGet(context) {
 
   if (provider === "google") {
     let claims;
-    try { 
+    try {
       claims = await validateGoogleIdToken(tokenData.id_token, {
         audience: clientId,
         nonce: tx.nonce,
       });
-    } catch (e) { // Variável (e) adicionada por precaução de compatibilidade
+    } catch (e) {
       return fail("Identidade não confirmada");
     }
     issuer = "https://accounts.google.com";
@@ -78,17 +79,20 @@ export async function onRequestGet(context) {
     if (!tokenData.access_token || !/^bearer$/i.test(tokenData.token_type || "")) {
       return fail("Resposta de token inválida");
     }
+    
     const userResponse = await fetch(cfg.userEndpoint, {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28", 
-        "User-Agent": "avalia-o2-oauth-lab",  
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "avalia-o2-oauth-lab",
       },
     });
+    
     if (userResponse.status !== 200) return fail("Falha ao consultar perfil");
     const profile = await userResponse.json();
-    if (!Number.isInteger(profile.id)) return fail("Falha ao consultar perfil"); 
+    
+    if (!Number.isInteger(profile.id)) return fail("Falha ao consultar perfil");
 
     issuer = "https://github.com";
     subject = String(profile.id);
@@ -106,16 +110,17 @@ export async function onRequestGet(context) {
       },
       body: JSON.stringify({ access_token: tokenData.access_token }),
     });
-    if (revokeResponse.status !== 204) { 
+    
+    if (revokeResponse.status !== 204) {
       return fail("Falha ao revogar autorização");
     }
   }
 
   const sessionValue = randomToken();
   const sessionExpires = now + 28800;
+  
   await context.env.DB.prepare(
-    `INSERT INTO sessions (id_hash, issuer, subject, email, display_name, expires_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO sessions (id_hash, issuer, subject, email, display_name, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(await sha256Hex(sessionValue), issuer, subject, email, displayName, sessionExpires, now).run();
 
   const headers = new Headers();
