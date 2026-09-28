@@ -5,7 +5,7 @@ import { validateGoogleIdToken } from "../../_shared/oidc.js";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 const fail = (message, status = 400) =>
-  new Response(message, { status, headers: NO_STORE }); // AJUSTE: todas as respostas de erro com no-store
+  new Response(message, { status, headers: NO_STORE }); 
 
 export async function onRequestGet(context) {
   const { provider } = context.params;
@@ -62,12 +62,12 @@ export async function onRequestGet(context) {
 
   if (provider === "google") {
     let claims;
-    try { // AJUSTE: recusa com 400 em vez de deixar o Worker lançar exceção (erro 1101)
+    try { 
       claims = await validateGoogleIdToken(tokenData.id_token, {
         audience: clientId,
         nonce: tx.nonce,
       });
-    } catch {
+    } catch (e) { // Variável (e) adicionada por precaução de compatibilidade
       return fail("Identidade não confirmada");
     }
     issuer = "https://accounts.google.com";
@@ -82,13 +82,13 @@ export async function onRequestGet(context) {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28", // AJUSTE: PDF pede 2026-03-10, versão inexistente (causa erro 400)
-        "User-Agent": "avalia-o2-oauth-lab",  // AJUSTE: exigido pela API do GitHub, não consta no PDF
+        "X-GitHub-Api-Version": "2022-11-28", 
+        "User-Agent": "avalia-o2-oauth-lab",  
       },
     });
     if (userResponse.status !== 200) return fail("Falha ao consultar perfil");
     const profile = await userResponse.json();
-    if (!Number.isInteger(profile.id)) return fail("Falha ao consultar perfil"); // AJUSTE: PDF 13.5 exige id inteiro
+    if (!Number.isInteger(profile.id)) return fail("Falha ao consultar perfil"); 
 
     issuer = "https://github.com";
     subject = String(profile.id);
@@ -106,7 +106,7 @@ export async function onRequestGet(context) {
       },
       body: JSON.stringify({ access_token: tokenData.access_token }),
     });
-    if (revokeResponse.status !== 204) { // AJUSTE: PDF 13.5 "Exija a resposta 204 antes de criar a sessão local"
+    if (revokeResponse.status !== 204) { 
       return fail("Falha ao revogar autorização");
     }
   }
