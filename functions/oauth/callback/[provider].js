@@ -3,10 +3,14 @@ import { getCookie, clearTxCookie, setSessionCookie } from "../../_shared/cookie
 import { PROVIDERS, clientIdFor, clientSecretFor } from "../../_shared/providers.js";
 import { validateGoogleIdToken } from "../../_shared/oidc.js";
 
+const NO_STORE = { "Cache-Control": "no-store" };
+const fail = (message, status = 400) =>
+  new Response(message, { status, headers: NO_STORE }); // AJUSTE: todas as respostas de erro com no-store
+
 export async function onRequestGet(context) {
   const { provider } = context.params;
   if (provider !== "google" && provider !== "github") {
-    return new Response("Not found", { status: 404 });
+    return fail("Not found", 404);
   }
 
   const url = new URL(context.request.url);
@@ -14,11 +18,11 @@ export async function onRequestGet(context) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
   if (error || !code || !state) {
-    return new Response("Requisição inválida", { status: 400 });
+    return fail("Requisição inválida");
   }
 
   const txCookie = getCookie(context.request, "__Host-oauth-tx");
-  if (!txCookie) return new Response("Transação ausente", { status: 400 });
+  if (!txCookie) return fail("Transação ausente");
 
   const txHash = await sha256Hex(txCookie);
   const stateHash = await sha256Hex(state);
@@ -29,7 +33,7 @@ export async function onRequestGet(context) {
   ).bind(txHash, provider, now).first();
 
   if (!tx || tx.state_hash !== stateHash) {
-    return new Response("Transação inválida ou expirada", { status: 400 });
+    return fail("Transação inválida ou expirada");
   }
 
   await context.env.DB.prepare(`DELETE FROM oauth_transactions WHERE id_hash = ?`).bind(txHash).run();
@@ -51,50 +55,60 @@ export async function onRequestGet(context) {
       code_verifier: tx.code_verifier,
     }),
   });
-  if (!tokenResponse.ok) return new Response("Falha na troca de tokens", { status: 400 });
+  if (!tokenResponse.ok) return fail("Falha na troca de tokens");
   const tokenData = await tokenResponse.json();
 
   let issuer, subject, email = null, displayName = null;
 
   if (provider === "google") {
-    const claims = await validateGoogleIdToken(tokenData.id_token, {
-      audience: clientId,
-      nonce: tx.nonce,
-    });
+    let claims;
+    try { // AJUSTE: recusa com 400 em vez de deixar o Worker lançar exceção (erro 1101)
+      claims = await validateGoogleIdToken(tokenData.id_token, {
+        audience: clientId,
+        nonce: tx.nonce,
+      });
+    } catch {
+      return fail("Identidade não confirmada");
+    }
     issuer = "https://accounts.google.com";
     subject = claims.sub;
     email = claims.email ?? null;
     displayName = claims.name ?? null;
   } else {
     if (!tokenData.access_token || !/^bearer$/i.test(tokenData.token_type || "")) {
-      return new Response("Resposta de token inválida", { status: 400 });
+      return fail("Resposta de token inválida");
     }
     const userResponse = await fetch(cfg.userEndpoint, {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2026-09-10",
-        "User-Agent": "avalia-o2-oauth-lab",
+        "X-GitHub-Api-Version": "2022-11-28", // AJUSTE: PDF pede 2026-03-10, versão inexistente (causa erro 400)
+        "User-Agent": "avalia-o2-oauth-lab",  // AJUSTE: exigido pela API do GitHub, não consta no PDF
       },
     });
-  if (userResponse.status !== 200) return new Response("Falha ao consultar perfil", { status: 400 });
-}
+    if (userResponse.status !== 200) return fail("Falha ao consultar perfil");
     const profile = await userResponse.json();
+    if (!Number.isInteger(profile.id)) return fail("Falha ao consultar perfil"); // AJUSTE: PDF 13.5 exige id inteiro
 
     issuer = "https://github.com";
     subject = String(profile.id);
     email = profile.email ?? null;
     displayName = profile.name || profile.login;
 
-    await fetch(cfg.revokeEndpoint(clientId), {
+    const revokeResponse = await fetch(cfg.revokeEndpoint(clientId), {
       method: "DELETE",
       headers: {
         Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
         "Content-Type": "application/json",
         Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "avalia-o2-oauth-lab",
       },
       body: JSON.stringify({ access_token: tokenData.access_token }),
     });
+    if (revokeResponse.status !== 204) { // AJUSTE: PDF 13.5 "Exija a resposta 204 antes de criar a sessão local"
+      return fail("Falha ao revogar autorização");
+    }
   }
 
   const sessionValue = randomToken();
@@ -104,7 +118,7 @@ export async function onRequestGet(context) {
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(await sha256Hex(sessionValue), issuer, subject, email, displayName, sessionExpires, now).run();
 
-   const headers = new Headers();
+  const headers = new Headers();
   headers.set("Location", context.env.PUBLIC_BASE_URL);
   headers.append("Set-Cookie", setSessionCookie(sessionValue));
   headers.append("Set-Cookie", clearTxCookie());
