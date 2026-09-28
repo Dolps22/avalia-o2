@@ -29,18 +29,18 @@ export async function validateGoogleIdToken(idToken, { audience, nonce }) {
   if (!valid) throw new Error("Assinatura inválida");
 
   const now = Math.floor(Date.now() / 1000);
-  if (payload.iss !== "https://accounts.google.com" && payload.iss !== "accounts.google.com") {
-    throw new Error("Emissor (iss) inválido");
-  }
+  if (payload.iss !== discovery.issuer) throw new Error("Emissor (iss) inválido");
   if (payload.aud !== audience) throw new Error("Audiência (aud) inválida");
   if (payload.exp < now) throw new Error("Token expirado");
+  if (!payload.iat || payload.iat > now + 60) throw new Error("Claim iat inválida"); // AJUSTE: PDF 13.5 item 8 pede validar iat
   if (payload.nonce !== nonce) throw new Error("Nonce não confere");
 
   return payload;
 }
 
 function base64UrlDecode(str) {
-  return atob(str.replace(/-/g, "+").replace(/_/g, "/"));
+  const padded = str.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(str.length / 4) * 4, "=");
+  return atob(padded);
 }
 
 function base64UrlDecodeToBytes(str) {
